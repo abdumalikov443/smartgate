@@ -1,0 +1,20 @@
+# secrets
+.env
+# node
+api/node_modules/
+api/dist/
+api/uploads/
+# python
+__pycache__/
+.pytest_cache/
+.venv/
+worker/pending_events.jsonl
+# models and media (downloaded / recorded locally)
+*.pt
+*.onnx
+videos/
+worker/videos/
+worker/eval/*.csv
+*.mp4
+*.avi
+photos/

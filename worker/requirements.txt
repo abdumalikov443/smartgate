@@ -1,0 +1,10 @@
+# SmartGate AI worker - Python 3.10-3.12
+ultralytics>=8.3        # YOLO11 + ByteTrack
+opencv-python>=4.9
+numpy>=1.26
+easyocr>=1.7            # licence plate OCR (Korean)
+insightface>=0.7.3      # face detection + recognition (RetinaFace + ArcFace)
+onnxruntime>=1.17
+requests>=2.31
+python-dotenv>=1.0
+pytest>=8.0

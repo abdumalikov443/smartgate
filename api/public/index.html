@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SmartGate</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="logo">SG</span><div><b>SmartGate</b><small>Gate &amp; attendance monitor</small></div></div>
+  <div class="controls">
+    <span class="live" id="live"><i></i>connecting…</span>
+    <input type="date" id="date">
+  </div>
+</header>
+
+<main>
+  <section class="kpis">
+    <div class="kpi"><small>Entered</small><b id="k-in">–</b><span id="k-in-sub"></span></div>
+    <div class="kpi"><small>Exited</small><b id="k-out">–</b><span id="k-out-sub"></span></div>
+    <div class="kpi accent"><small>Inside now</small><b id="k-inside">–</b><span id="k-inside-sub"></span></div>
+    <div class="kpi"><small>Avg. stay</small><b id="k-dwell">–</b><span id="k-dwell-sub"></span></div>
+    <div class="kpi"><small>Plates read</small><b id="k-plates">–</b><span id="k-plates-sub"></span></div>
+  </section>
+
+  <section class="grid two">
+    <div class="card wide"><h2>Traffic by hour <small>KST</small></h2><div class="chart"><canvas id="hourly"></canvas></div></div>
+    <div class="card"><h2>By vehicle type</h2><div class="chart"><canvas id="types"></canvas></div></div>
+  </section>
+
+  <section class="grid two">
+    <div class="card wide"><h2>Latest gate events</h2>
+      <table><thead><tr><th>Time</th><th></th><th>Type</th><th>Plate</th><th>Snapshot</th></tr></thead><tbody id="events"></tbody></table>
+    </div>
+    <div class="card"><h2>Inside now</h2><ul class="list" id="inside"></ul></div>
+  </section>
+
+  <section class="grid two">
+    <div class="card wide"><h2>Attendance</h2>
+      <table><thead><tr><th>Employee</th><th>Check-in</th><th>Last seen</th><th>Worked</th><th>Status</th></tr></thead><tbody id="attendance"></tbody></table>
+    </div>
+    <div class="card"><h2>Unknown person alerts</h2><ul class="list" id="alerts"></ul></div>
+  </section>
+</main>
+
+<script src="/vendor/chartjs/chart.umd.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
