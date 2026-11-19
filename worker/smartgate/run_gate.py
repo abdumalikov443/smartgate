@@ -14,6 +14,7 @@ import argparse
 import csv
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 import cv2
 
@@ -91,6 +92,7 @@ def main():
     ap.add_argument("--plates", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--min-plate-height", type=int, default=120, help="only OCR vehicles at least this tall (px)")
     ap.add_argument("--plate-every", type=int, default=5, help="OCR a vehicle every N frames")
+    ap.add_argument("--plate-debug", help="save the OCR crops and raw OCR text to this folder")
     ap.add_argument("--save", help="write the annotated video here")
     ap.add_argument("--show", action="store_true")
     ap.add_argument("--csv", help="also write events to this CSV")
@@ -102,10 +104,10 @@ def main():
     if not ok:
         raise SystemExit(f"cannot read {args.source}")
     orig_h, orig_w = frame.shape[:2]
-    frame = limit_width(frame, args.max_width)
-    if frame.shape[1] != orig_w:
-        print(f"video {orig_w}x{orig_h} -> processing at {frame.shape[1]}x{frame.shape[0]} (--max-width)")
-    p1, p2 = pick_line(frame) if args.pick_line or not args.line else parse_line(args.line)
+    preview = limit_width(frame, args.max_width)        # `frame` itself stays full size for plate crops
+    if preview.shape[1] != orig_w:
+        print(f"video {orig_w}x{orig_h} -> processing at {preview.shape[1]}x{preview.shape[0]} (--max-width)")
+    p1, p2 = pick_line(preview) if args.pick_line or not args.line else parse_line(args.line)
 
     tracker = VehicleTracker(config.YOLO_WEIGHTS)
     counter = LineCounter(p1, p2, margin=args.margin, in_is_positive=not args.flip)
@@ -114,11 +116,18 @@ def main():
     writer = None
     if args.save:
         fps = cap.get(cv2.CAP_PROP_FPS) or 25
-        writer = cv2.VideoWriter(args.save, cv2.VideoWriter_fourcc(*"mp4v"), fps, (frame.shape[1], frame.shape[0]))
+        writer = cv2.VideoWriter(args.save, cv2.VideoWriter_fourcc(*"mp4v"), fps, (preview.shape[1], preview.shape[0]))
     csv_file = open(args.csv, "w", newline="", encoding="utf-8") if args.csv else None
     csv_out = csv.writer(csv_file) if csv_file else None
     if csv_out:
         csv_out.writerow(["frame", "track_id", "vehicle_type", "direction", "plate", "plate_conf"])
+
+    debug_dir = Path(args.plate_debug) if args.plate_debug else None
+    debug_log = None
+    if debug_dir:
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        debug_log = (debug_dir / "ocr.tsv").open("w", encoding="utf-8")
+        debug_log.write("crop\tplate\traw_ocr\n")
 
     counts = {"IN": 0, "OUT": 0}
     plates_seen: dict[int, str] = {}
@@ -130,7 +139,9 @@ def main():
             ok, frame = cap.read()
             continue
         processed += 1
-        frame = limit_width(frame, args.max_width)
+        full = frame                                   # original resolution, used for plate crops
+        frame = limit_width(full, args.max_width)
+        scale = full.shape[1] / frame.shape[1]
         t = time.time()
         tracks = tracker.update(frame)
         t_detect += time.time() - t
@@ -139,8 +150,16 @@ def main():
             if (args.plates and tr.height >= args.min_plate_height and processed % args.plate_every == 0
                     and voter.wants_more(tr.track_id)):
                 t = time.time()
-                plate, conf = read_plate(frame[max(0, y1):y2, max(0, x1):x2])
+                # detection runs on the small frame; the plate is read from the full-resolution frame
+                crop = full[max(0, int(y1 * scale)):int(y2 * scale), max(0, int(x1 * scale)):int(x2 * scale)]
+                raw: list[str] = []
+                plate, conf = read_plate(crop, debug=raw)
                 t_ocr += time.time() - t
+                if debug_dir:
+                    name = f"t{tr.track_id:04d}_f{n:05d}.jpg"
+                    cv2.imwrite(str(debug_dir / name), crop[int(crop.shape[0] * 0.4):])
+                    debug_log.write(f"{name}\t{plate or '-'}\t{' | '.join(raw)}\n")
+                    debug_log.flush()
                 voter.add(tr.track_id, plate, conf)
                 if plate:
                     plates_seen[tr.track_id] = voter.best(tr.track_id)[0]
@@ -179,6 +198,9 @@ def main():
             f.release()
     if csv_file:
         csv_file.close()
+    if debug_log:
+        debug_log.close()
+        print(f"plate debug: crops and raw OCR text in {debug_dir}")
     cv2.destroyAllWindows()
 
 

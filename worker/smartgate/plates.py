@@ -67,8 +67,44 @@ def _reader():
     return easyocr.Reader(["ko", "en"], gpu=False)
 
 
-def read_plate(vehicle_crop: np.ndarray, min_conf: float = 0.3) -> tuple[str | None, float]:
-    """OCR the lower 60% of a vehicle crop (BGR) and return (plate, confidence)."""
+def plate_candidates(results: list) -> list[tuple[str, float]]:
+    """Build candidate strings from EasyOCR results [(box, text, conf), ...].
+
+    Plates are often split into several boxes, and older Korean plates have
+    two lines (서울 12 / 가 3456), so besides single boxes we try each text row
+    joined left-to-right and all rows joined top-to-bottom.
+    """
+    if not results:
+        return []
+    def cx(r): return sum(p[0] for p in r[0]) / 4
+    def cy(r): return sum(p[1] for p in r[0]) / 4
+    def hgt(r): return max(p[1] for p in r[0]) - min(p[1] for p in r[0])
+    cands = [(r[1], float(r[2])) for r in results]
+    rows: list[list] = []
+    tol = max(1.0, float(np.median([hgt(r) for r in results]))) * 0.6
+    for r in sorted(results, key=cy):
+        if rows and abs(cy(rows[-1][-1]) - cy(r)) <= tol:
+            rows[-1].append(r)
+        else:
+            rows.append([r])
+    joined_rows = []
+    for row in rows:
+        row = sorted(row, key=cx)
+        joined_rows.append(("".join(r[1] for r in row), float(np.mean([r[2] for r in row]))))
+    seen = {c[0] for c in cands}
+    cands += [jr for jr in joined_rows if jr[0] not in seen]
+    if len(joined_rows) > 1:
+        cands.append(("".join(t for t, _ in joined_rows), float(np.mean([c for _, c in joined_rows]))))
+        for a, b in zip(joined_rows, joined_rows[1:]):           # neighbouring rows (two-line plates)
+            cands.append((a[0] + b[0], (a[1] + b[1]) / 2))
+    return cands
+
+
+def read_plate(vehicle_crop: np.ndarray, min_conf: float = 0.1, debug: list | None = None) -> tuple[str | None, float]:
+    """OCR the lower 60% of a vehicle crop (BGR) and return (plate, confidence).
+
+    Pass a list as `debug` to receive the raw OCR texts (used by --plate-debug).
+    """
     h = vehicle_crop.shape[0]
     region = vehicle_crop[int(h * 0.4):, :]
     if region.size == 0:
@@ -78,13 +114,10 @@ def read_plate(vehicle_crop: np.ndarray, min_conf: float = 0.3) -> tuple[str | N
         import cv2
         region = cv2.resize(region, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
     results = [r for r in _reader().readtext(region) if r[2] >= min_conf]
+    if debug is not None:
+        debug.extend(f"{r[1]}({r[2]:.2f})" for r in results)
     best: tuple[str | None, float] = (None, 0.0)
-    # single boxes first, then the whole line joined left-to-right (plates are often split in two)
-    candidates = [(r[1], r[2]) for r in results]
-    if len(results) > 1:
-        ordered = sorted(results, key=lambda r: r[0][0][0])
-        candidates.append(("".join(r[1] for r in ordered), float(np.mean([r[2] for r in ordered]))))
-    for text, conf in candidates:
+    for text, conf in plate_candidates(results):
         plate = normalize_plate(text)
         if plate and conf > best[1]:
             best = (plate, float(conf))
