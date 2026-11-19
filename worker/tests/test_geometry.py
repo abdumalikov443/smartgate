@@ -19,14 +19,16 @@ def test_flip_swaps_directions():
 
 
 def test_jitter_inside_dead_zone_is_ignored():
-    c = LineCounter((0, 100), (200, 100), margin=6)
-    assert walk(c, 1, [(100, 90), (100, 97), (100, 103), (100, 98), (100, 104)]) == []
+    c = LineCounter((0, 100), (200, 100), margin=12)
+    assert walk(c, 1, [(100, 80), (100, 95), (100, 106), (100, 92), (100, 110)]) == []
 
 
-def test_each_track_counted_once_per_direction():
+def test_each_track_is_counted_only_once():
+    # a box wobbling back over the line right after crossing must not add an OUT
     c = LineCounter((0, 100), (200, 100))
     events = walk(c, 7, [(100, 60), (100, 140), (100, 60), (100, 140)])
-    assert [e.direction for e in events] == ["IN", "OUT"]
+    assert [e.direction for e in events] == ["IN"]
+    assert [e.direction for e in walk(c, 8, [(100, 140), (100, 60)])] == ["OUT"]
 
 
 def test_crossing_outside_the_segment_is_ignored():

@@ -58,6 +58,8 @@ def main():
     ap.add_argument("--line", help="x1,y1,x2,y2 of the gate line in pixels")
     ap.add_argument("--pick-line", action="store_true")
     ap.add_argument("--flip", action="store_true", help="swap IN and OUT")
+    ap.add_argument("--margin", type=float, default=12, help="dead zone around the line in pixels (bigger = less double counting)")
+    ap.add_argument("--stride", type=int, default=1, help="process every N-th frame (2 = about twice as fast)")
     ap.add_argument("--gate", default="main")
     ap.add_argument("--plates", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--min-plate-height", type=int, default=120, help="only OCR vehicles at least this tall (px)")
@@ -75,7 +77,7 @@ def main():
     p1, p2 = pick_line(frame) if args.pick_line or not args.line else parse_line(args.line)
 
     tracker = VehicleTracker(config.YOLO_WEIGHTS)
-    counter = LineCounter(p1, p2, in_is_positive=not args.flip)
+    counter = LineCounter(p1, p2, margin=args.margin, in_is_positive=not args.flip)
     voter = PlateVoter()
     api = None if args.dry_run else ApiClient(config.API_URL, config.API_KEY)
     writer = None
@@ -89,14 +91,24 @@ def main():
 
     counts = {"IN": 0, "OUT": 0}
     plates_seen: dict[int, str] = {}
-    n, t0 = 0, time.time()
+    n, processed, t0 = 0, 0, time.time()
+    t_detect = t_ocr = 0.0
     while ok:
         n += 1
-        for tr in tracker.update(frame):
+        if (n - 1) % args.stride:
+            ok, frame = cap.read()
+            continue
+        processed += 1
+        t = time.time()
+        tracks = tracker.update(frame)
+        t_detect += time.time() - t
+        for tr in tracks:
             x1, y1, x2, y2 = tr.box
-            if (args.plates and tr.height >= args.min_plate_height and n % args.plate_every == 0
+            if (args.plates and tr.height >= args.min_plate_height and processed % args.plate_every == 0
                     and voter.wants_more(tr.track_id)):
+                t = time.time()
                 plate, conf = read_plate(frame[max(0, y1):y2, max(0, x1):x2])
+                t_ocr += time.time() - t
                 voter.add(tr.track_id, plate, conf)
                 if plate:
                     plates_seen[tr.track_id] = voter.best(tr.track_id)[0]
@@ -128,7 +140,8 @@ def main():
         ok, frame = cap.read()
 
     elapsed = time.time() - t0
-    print(f"\nframes={n}  fps={n / elapsed:.1f}  IN={counts['IN']}  OUT={counts['OUT']}")
+    print(f"\nframes={n}  processed={processed}  fps={processed / elapsed:.1f}  IN={counts['IN']}  OUT={counts['OUT']}")
+    print(f"time: detection+tracking {t_detect:.0f}s · plate OCR {t_ocr:.0f}s · other {elapsed - t_detect - t_ocr:.0f}s")
     for f in (writer, cap):
         if f:
             f.release()

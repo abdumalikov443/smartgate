@@ -35,16 +35,20 @@ class LineCounter:
 
     Crossing from the negative side to the positive side is "IN" (flip with
     `in_is_positive=False`). A dead zone of `margin` pixels around the line
-    ignores jitter, and each track is counted at most once per direction.
+    ignores jitter, and each track is counted only once: a vehicle passes a
+    gate once, so a box wobbling back over the line must not add an OUT
+    right after its IN.
     """
     p1: Point
     p2: Point
-    margin: float = 6.0
+    margin: float = 12.0
     in_is_positive: bool = True
     _last_side: dict[int, int] = field(default_factory=dict)
-    _counted: set[tuple[int, str]] = field(default_factory=set)
+    _counted: set[int] = field(default_factory=set)
 
     def update(self, track_id: int, point: Point) -> Crossing | None:
+        if track_id in self._counted:
+            return None
         d = side_of_line(self.p1, self.p2, point)
         if abs(d) < self.margin:
             return None                       # inside the dead zone: keep the previous side
@@ -54,9 +58,7 @@ class LineCounter:
         if prev is None or prev == side or not within_segment(self.p1, self.p2, point):
             return None
         direction = "IN" if (side > 0) == self.in_is_positive else "OUT"
-        if (track_id, direction) in self._counted:
-            return None
-        self._counted.add((track_id, direction))
+        self._counted.add(track_id)
         return Crossing(track_id, direction, point)
 
     def forget(self, track_id: int) -> None:
