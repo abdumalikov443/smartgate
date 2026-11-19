@@ -9,6 +9,8 @@ export class VehicleEventDto {
   @IsIn(VEHICLE_TYPES) vehicleType: (typeof VEHICLE_TYPES)[number];
   @IsIn(['IN', 'OUT']) direction: 'IN' | 'OUT';
   @IsOptional() @Matches(PLATE_PATTERN, { message: 'plate must be a Korean plate like 12가3456' }) plate?: string | null;
+  /** last 4 digits - sent even when the Hangul letter of the plate could not be read */
+  @IsOptional() @Matches(/^\d{4}$/, { message: 'plateDigits must be 4 digits' }) plateDigits?: string | null;
   @IsOptional() @IsNumber() @Min(0) @Max(1) plateConfidence?: number;
   @IsISO8601() occurredAt: string;
   @IsOptional() @IsString() @MaxLength(400_000) snapshot?: string | null;   // base64 JPEG

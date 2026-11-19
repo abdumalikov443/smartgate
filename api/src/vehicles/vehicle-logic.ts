@@ -2,24 +2,31 @@
 import { kstHour, minutesBetween } from '../common/time';
 import { Direction, VEHICLE_TYPES, VehicleType } from './vehicle.schemas';
 
-export interface EventLike { vehicleType: VehicleType; direction: Direction; occurredAt: Date; plate?: string | null }
-export interface VisitLike { _id?: unknown; plate?: string | null; vehicleType: VehicleType; inAt: Date; outAt?: Date | null; dwellMinutes?: number | null }
+export interface EventLike { vehicleType: VehicleType; direction: Direction; occurredAt: Date; plate?: string | null; plateDigits?: string | null }
+export interface VisitLike { _id?: unknown; plate?: string | null; plateDigits?: string | null; vehicleType: VehicleType; inAt: Date; outAt?: Date | null; dwellMinutes?: number | null }
 
 /** A visit still open after this long is treated as a missed OUT, not "inside now". */
 export const STALE_VISIT_HOURS = 24;
 
 /**
  * Which open visit does an OUT event close?
- * - with a plate: the latest open visit with the same plate (exact match);
- * - without a plate: the oldest open plate-less visit of the same vehicle type (FIFO estimate).
+ * 1. full plate: the latest open visit with the same plate (exact match);
+ * 2. only the last 4 digits (letter unreadable): the latest open visit of the same type with those digits;
+ * 3. nothing readable: the oldest open visit of the same type that has no plate info either (FIFO estimate).
  */
 export function chooseVisitToClose<T extends VisitLike>(open: T[], out: EventLike): T | null {
   const before = open.filter((v) => !v.outAt && v.inAt.getTime() <= out.occurredAt.getTime());
+  const latest = (vs: T[]) => vs.sort((a, b) => b.inAt.getTime() - a.inAt.getTime())[0] ?? null;
   if (out.plate) {
-    const same = before.filter((v) => v.plate === out.plate);
-    return same.sort((a, b) => b.inAt.getTime() - a.inAt.getTime())[0] ?? null;
+    const same = latest(before.filter((v) => v.plate === out.plate));
+    if (same) return same;
   }
-  const unplated = before.filter((v) => !v.plate && v.vehicleType === out.vehicleType);
+  const digits = out.plateDigits ?? (out.plate ? out.plate.slice(-4) : null);
+  if (digits) {
+    const byDigits = latest(before.filter((v) => v.vehicleType === out.vehicleType && (v.plateDigits ?? v.plate?.slice(-4)) === digits));
+    if (byDigits || out.plate) return byDigits;
+  }
+  const unplated = before.filter((v) => !v.plate && !v.plateDigits && v.vehicleType === out.vehicleType);
   return unplated.sort((a, b) => a.inAt.getTime() - b.inAt.getTime())[0] ?? null;
 }
 
@@ -37,6 +44,7 @@ export interface VehicleStats {
   avgDwellByType: Record<VehicleType, number | null>;
   platesRead: number;
   plateReadRate: number | null;
+  plateDigitsOnly: number;
 }
 
 /** Dashboard numbers for one day. `openVisits` = visits without OUT; `closedVisits` = closed that day. */
@@ -56,6 +64,7 @@ export function buildVehicleStats(events: EventLike[], openVisits: VisitLike[], 
   const avg = (xs: number[]) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : null);
   const dwell = (vs: VisitLike[]) => vs.map((v) => v.dwellMinutes).filter((m): m is number => typeof m === 'number');
   const platesRead = events.filter((e) => e.plate).length;
+  const plateDigitsOnly = events.filter((e) => !e.plate && e.plateDigits).length;
   return {
     totals, byType, hourly,
     insideNow: inside.length, insideByType,
@@ -63,5 +72,6 @@ export function buildVehicleStats(events: EventLike[], openVisits: VisitLike[], 
     avgDwellByType: Object.fromEntries(VEHICLE_TYPES.map((t) => [t, avg(dwell(closedVisits.filter((v) => v.vehicleType === t)))])) as VehicleStats['avgDwellByType'],
     platesRead,
     plateReadRate: events.length ? Math.round((platesRead / events.length) * 1000) / 1000 : null,
+    plateDigitsOnly,
   };
 }

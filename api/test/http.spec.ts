@@ -62,6 +62,8 @@ describe('SmartGate HTTP API', () => {
     await post('/api/vehicle-events', { ...vehicleEvent, plate: 'ABC-123' }).expect(400);
     await post('/api/vehicle-events', { ...vehicleEvent, extra: 1 }).expect(400);
     await post('/api/vehicle-events', { ...vehicleEvent, plate: null }).expect(201);   // unreadable plate is fine
+    await post('/api/vehicle-events', { ...vehicleEvent, plate: null, plateDigits: '2641' }).expect(201);
+    await post('/api/vehicle-events', { ...vehicleEvent, plateDigits: '26a1' }).expect(400);
   });
 
   it('serves stats and checks the date format', async () => {

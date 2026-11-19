@@ -40,6 +40,24 @@ describe('chooseVisitToClose', () => {
     expect(v?._id).toBe('d');
   });
 
+  it('matches by the last 4 digits when the plate letter was unreadable', () => {
+    const visits: VisitLike[] = [
+      { _id: 'x', plateDigits: '2641', vehicleType: 'car', inAt: t('2026-11-17T01:00:00Z') },
+      { _id: 'y', plate: '34배7104', plateDigits: '7104', vehicleType: 'car', inAt: t('2026-11-17T01:10:00Z') },
+      { _id: 'z', vehicleType: 'car', inAt: t('2026-11-17T00:50:00Z') },
+    ];
+    const at = t('2026-11-17T04:00:00Z');
+    expect(chooseVisitToClose(visits, { plateDigits: '2641', vehicleType: 'car', direction: 'OUT', occurredAt: at })?._id).toBe('x');
+    // full plate on OUT, only digits on IN
+    expect(chooseVisitToClose(visits, { plate: '32배2641', vehicleType: 'car', direction: 'OUT', occurredAt: at })?._id).toBe('x');
+    // digits-only OUT can also close a visit whose IN had the full plate
+    expect(chooseVisitToClose(visits, { plateDigits: '7104', vehicleType: 'car', direction: 'OUT', occurredAt: at })?._id).toBe('y');
+    // a full plate that matches nothing must not close a random visit
+    expect(chooseVisitToClose(visits, { plate: '99허9999', vehicleType: 'car', direction: 'OUT', occurredAt: at })).toBeNull();
+    // nothing readable: FIFO only among visits without any plate info
+    expect(chooseVisitToClose(visits, { vehicleType: 'car', direction: 'OUT', occurredAt: at })?._id).toBe('z');
+  });
+
   it('returns null when nothing matches', () => {
     expect(chooseVisitToClose(open, { plate: '99허9999', vehicleType: 'car', direction: 'OUT', occurredAt: t('2026-11-17T05:00:00Z') })).toBeNull();
     expect(chooseVisitToClose(open, { plate: null, vehicleType: 'bus', direction: 'OUT', occurredAt: t('2026-11-17T05:00:00Z') })).toBeNull();
@@ -79,6 +97,7 @@ describe('buildVehicleStats', () => {
 
   it('reports the plate read rate', () => {
     expect(s.platesRead).toBe(2);
+    expect(s.plateDigitsOnly).toBe(0);
     expect(s.plateReadRate).toBe(0.667);
   });
 });

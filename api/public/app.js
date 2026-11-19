@@ -34,7 +34,7 @@ async function loadStats() {
   $('#k-out-sub').textContent = `${s.byType.truck.OUT} trucks · ${s.byType.car.OUT} cars`;
   $('#k-inside-sub').textContent = `${s.insideByType.truck} trucks inside`;
   $('#k-dwell-sub').textContent = `trucks ${mins(s.avgDwellByType.truck)}`;
-  $('#k-plates-sub').textContent = `${s.platesRead} plates recognised`;
+  $('#k-plates-sub').textContent = `${s.platesRead} full plates · ${s.plateDigitsOnly ?? 0} by digits`;
   hourly.data.datasets[0].data = s.hourly.map((h) => h.IN);
   hourly.data.datasets[1].data = s.hourly.map((h) => h.OUT);
   hourly.update();
@@ -43,20 +43,22 @@ async function loadStats() {
 }
 
 const typeCell = (t) => `<span class="type"><i style="background:${COLORS[t]}"></i>${esc(t)}</span>`;
-const plateCell = (p) => (p ? `<span class="plate">${esc(p)}</span>` : '<small style="color:#9CA3AF">unread</small>');
+const plateCell = (p, digits) => (p ? `<span class="plate">${esc(p)}</span>`
+  : digits ? `<span class="plate partial" title="letter unreadable - last 4 digits">··${esc(digits)}</span>`
+  : '<small style="color:#9CA3AF">unread</small>');
 
 async function loadEvents(flashFirst = false) {
   const rows = await get('/api/vehicle-events?limit=40');
   $('#events').innerHTML = rows.length ? rows.map((e, i) => `<tr class="${flashFirst && i === 0 ? 'new' : ''}">
       <td>${time(e.occurredAt)}</td><td><span class="dir ${e.direction}">${e.direction}</span></td>
-      <td>${typeCell(e.vehicleType)}</td><td>${plateCell(e.plate)}</td>
+      <td>${typeCell(e.vehicleType)}</td><td>${plateCell(e.plate, e.plateDigits)}</td>
       <td>${e.snapshotUrl ? `<img class="snap" src="${esc(e.snapshotUrl)}" alt="">` : '<span class="snap"></span>'}</td></tr>`).join('')
     : '<tr><td class="empty" colspan="5">No events yet</td></tr>';
 }
 
 async function loadInside() {
   const rows = await get('/api/vehicles/inside');
-  $('#inside').innerHTML = rows.length ? rows.map((v) => `<li><div>${typeCell(v.vehicleType)} ${plateCell(v.plate)}</div>
+  $('#inside').innerHTML = rows.length ? rows.map((v) => `<li><div>${typeCell(v.vehicleType)} ${plateCell(v.plate, v.plateDigits)}</div>
       <small>since ${time(v.inAt)} · ${mins(Math.round((Date.now() - new Date(v.inAt)) / 60000))}</small></li>`).join('')
     : '<li class="empty">Nobody inside</li>';
 }

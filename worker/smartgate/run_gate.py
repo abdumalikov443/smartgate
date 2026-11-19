@@ -120,14 +120,14 @@ def main():
     csv_file = open(args.csv, "w", newline="", encoding="utf-8") if args.csv else None
     csv_out = csv.writer(csv_file) if csv_file else None
     if csv_out:
-        csv_out.writerow(["frame", "track_id", "vehicle_type", "direction", "plate", "plate_conf"])
+        csv_out.writerow(["frame", "track_id", "vehicle_type", "direction", "plate", "plate_digits", "plate_conf"])
 
     debug_dir = Path(args.plate_debug) if args.plate_debug else None
     debug_log = None
     if debug_dir:
         debug_dir.mkdir(parents=True, exist_ok=True)
         debug_log = (debug_dir / "ocr.tsv").open("w", encoding="utf-8")
-        debug_log.write("crop\tplate\traw_ocr\n")
+        debug_log.write("crop\tplate\tdigits\traw_ocr\n")
 
     counts = {"IN": 0, "OUT": 0}
     plates_seen: dict[int, str] = {}
@@ -153,31 +153,35 @@ def main():
                 # detection runs on the small frame; the plate is read from the full-resolution frame
                 crop = full[max(0, int(y1 * scale)):int(y2 * scale), max(0, int(x1 * scale)):int(x2 * scale)]
                 raw: list[str] = []
-                plate, conf = read_plate(crop, debug=raw)
+                read = read_plate(crop, debug=raw)
                 t_ocr += time.time() - t
                 if debug_dir:
                     name = f"t{tr.track_id:04d}_f{n:05d}.jpg"
                     cv2.imwrite(str(debug_dir / name), crop[int(crop.shape[0] * 0.4):])
-                    debug_log.write(f"{name}\t{plate or '-'}\t{' | '.join(raw)}\n")
+                    debug_log.write(f"{name}\t{read.plate or '-'}\t{read.digits or '-'}\t{' | '.join(raw)}\n")
                     debug_log.flush()
-                voter.add(tr.track_id, plate, conf)
-                if plate:
-                    plates_seen[tr.track_id] = voter.best(tr.track_id)[0]
+                voter.add(tr.track_id, read.plate, read.conf, read.digits)
+                if read.plate or read.digits:
+                    best_plate = voter.best(tr.track_id)[0]
+                    plates_seen[tr.track_id] = best_plate or f"..{voter.best_digits(tr.track_id)}"
             crossing = counter.update(tr.track_id, tr.anchor)
             if crossing:
                 counts[crossing.direction] += 1
                 plate, plate_conf = voter.best(tr.track_id)
+                digits = voter.best_digits(tr.track_id)
                 event = {
                     "gateId": args.gate, "trackId": tr.track_id, "vehicleType": tr.label,
-                    "direction": crossing.direction, "plate": plate, "plateConfidence": plate_conf,
+                    "direction": crossing.direction, "plate": plate, "plateDigits": digits,
+                    "plateConfidence": plate_conf,
                     "occurredAt": datetime.now(timezone.utc).isoformat(),
                     "snapshot": jpeg_b64(frame[max(0, y1):y2, max(0, x1):x2]),
                 }
-                print(f"[{n:6d}] {crossing.direction:3s} #{tr.track_id} {tr.label:10s} {plate or '-'}")
+                print(f"[{n:6d}] {crossing.direction:3s} #{tr.track_id} {tr.label:10s} "
+                      f"{plate or (f'..{digits}' if digits else '-')}")
                 if api:
                     api.vehicle_event(event)
                 if csv_out:
-                    csv_out.writerow([n, tr.track_id, tr.label, crossing.direction, plate or "", plate_conf])
+                    csv_out.writerow([n, tr.track_id, tr.label, crossing.direction, plate or "", digits or "", plate_conf])
             if writer or args.show:
                 draw_track(frame, tr, plates_seen.get(tr.track_id))
         if writer or args.show:

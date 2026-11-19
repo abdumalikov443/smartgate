@@ -64,3 +64,39 @@ def test_noise_text_around_the_plate_is_ignored():
 def test_no_text_gives_no_candidates():
     from smartgate.plates import plate_candidates
     assert plate_candidates([]) == []
+
+
+def test_plate_digits_fallback_when_the_letter_is_misread():
+    from smartgate.plates import plate_digits
+    assert plate_digits("3242641") == "2641"        # 배 read as 4
+    assert plate_digits("'2u2641") is None          # only 5 digits: too unsure
+    assert plate_digits("2261") is None
+    assert plate_digits("12345678901") is None      # too long to be a plate
+
+
+def test_best_read_prefers_a_full_plate_over_digits():
+    from smartgate.plates import best_read
+    r = best_read([(box(0, 0), "3242641", 0.94), (box(0, 40), "32배2641", 0.5)])
+    assert (r.plate, r.digits) == ("32배2641", "2641")
+    r = best_read([(box(0, 0), "3242641", 0.94)])
+    assert (r.plate, r.digits) == (None, "2641")
+
+
+def test_voter_keeps_digits_when_no_full_plate():
+    v = PlateVoter()
+    v.add(1, None, 0.9, "2641")
+    v.add(1, None, 0.3, "2647")
+    assert v.best(1) == (None, 0.0) and v.best_digits(1) == "2641"
+    v.add(2, "12가3456", 0.8)
+    assert v.best_digits(2) == "3456"
+
+
+def test_locate_plates_finds_a_yellow_plate():
+    cv2 = pytest.importorskip("cv2")
+    import numpy as np
+    from smartgate.plates import locate_plates
+    img = np.full((300, 700, 3), 90, np.uint8)                       # grey car body
+    cv2.rectangle(img, (420, 150), (560, 185), (40, 200, 230), -1)    # yellow plate (BGR), ratio 4:1
+    cv2.putText(img, "32 2641", (430, 178), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (20, 20, 20), 2)
+    boxes = locate_plates(img)
+    assert boxes and abs(boxes[0][0] - 420) < 10 and abs(boxes[0][2] - 140) < 15

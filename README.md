@@ -18,8 +18,8 @@ on a web dashboard.
 | | |
 |---|---|
 | 🚗 **Vehicle counting** | YOLO11 detects cars, trucks, buses and motorcycles; ByteTrack follows each one; a virtual line decides IN or OUT. Each vehicle is counted once. |
-| 🔢 **Plate reading** | EasyOCR reads the plate on the vehicle crop; only valid Korean formats (`12가3456`, `서울12가3456`) are accepted; reads from several frames are combined by voting. |
-| ⏱️ **Dwell time** | An OUT event is matched to its IN by plate, so the dashboard shows how long each truck stayed and who is inside right now. |
+| 🔢 **Plate reading** | The plate rectangle is located by colour and shape, cropped tight and read by EasyOCR restricted to plate characters. Only valid Korean formats (`12가3456`, `서울12가3456`) count as a full plate; when the Hangul letter is unreadable the last 4 digits are kept as a fallback key. Reads from several frames are combined by voting. |
+| ⏱️ **Dwell time** | An OUT event is matched to its IN by full plate, then by last 4 digits, so the dashboard shows how long each truck stayed and who is inside right now. |
 | 🙂 **Face attendance** | InsightFace (RetinaFace + ArcFace) recognises enrolled employees; first and last sighting of the day give check-in, check-out and hours worked. |
 | 🚨 **Unknown person alerts** | A face that stays unrecognised for several frames triggers an alert with a snapshot. |
 | 📊 **Live dashboard** | KPIs, traffic by hour, vehicle types, latest events with plates and snapshots, attendance and alerts — updated over WebSocket. |
@@ -39,7 +39,8 @@ on a web dashboard.
 |---|---|---|
 | Vehicle detection | YOLO11n (COCO pretrained) | classes car, motorcycle, bus, truck — no extra training needed |
 | Tracking | ByteTrack | built into Ultralytics |
-| Plate OCR | EasyOCR (ko + en) | format check + per-vehicle voting instead of a separate plate detector |
+| Plate localisation | OpenCV colour + shape rules | yellow / white / green rectangles, aspect ratio 1.8–6.5 |
+| Plate OCR | EasyOCR (Korean, plate-character allowlist) | format check, last-4-digit fallback, per-vehicle voting |
 | Face detection + recognition | InsightFace `buffalo_l` (RetinaFace + ArcFace) | 512-d embeddings, cosine similarity ≥ 0.45 |
 
 ## Privacy by design
@@ -91,6 +92,9 @@ curl -X POST localhost:3000/api/employees -H "x-api-key: <key>" -H "content-type
 python -m smartgate.enroll --employee <id> --images photos/asadbek/
 python -m smartgate.run_faces --source 0
 ```
+
+### Plate reading - known limit
+On distant, low-resolution footage (plate ≈ 30 px tall) the digits are read but the Hangul letter usually is not, so only the last 4 digits are stored (`··2641` on the dashboard). A real gate camera 3–5 m from slow vehicles gives much larger plates; a model trained on Korean plates would be the next step. `--plate-debug DIR` saves every plate crop with the raw OCR text for tuning.
 
 ## Measuring accuracy
 Count the vehicles in each test video by hand once (`eval/truth.json`), run the gate with `--dry-run --csv eval/<video>.csv`, then:

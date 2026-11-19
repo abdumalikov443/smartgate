@@ -21,14 +21,16 @@ export class VehiclesService {
     const occurredAt = new Date(dto.occurredAt);
     const event = await this.events.create({
       gateId: dto.gateId, trackId: dto.trackId, vehicleType: dto.vehicleType, direction: dto.direction,
-      plate: dto.plate ?? null, plateConfidence: dto.plateConfidence ?? 0, occurredAt,
+      plate: dto.plate ?? null, plateDigits: dto.plateDigits ?? (dto.plate ? dto.plate.slice(-4) : null),
+      plateConfidence: dto.plateConfidence ?? 0, occurredAt,
       snapshotUrl: await this.snapshots.save(dto.snapshot, occurredAt),
     });
 
     let visit = null;
     if (dto.direction === 'IN') {
       visit = await this.visits.create({
-        plate: event.plate, vehicleType: event.vehicleType, gateId: event.gateId, inAt: occurredAt, inEventId: event._id,
+        plate: event.plate, plateDigits: event.plateDigits, vehicleType: event.vehicleType, gateId: event.gateId,
+        inAt: occurredAt, inEventId: event._id,
       });
     } else {
       const candidates = await this.visits

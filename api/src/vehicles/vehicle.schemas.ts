@@ -13,6 +13,7 @@ export class VehicleEvent {
   @Prop({ required: true, enum: VEHICLE_TYPES }) vehicleType: VehicleType;
   @Prop({ required: true, enum: ['IN', 'OUT'] }) direction: Direction;
   @Prop({ type: String, default: null, index: true }) plate: string | null;
+  @Prop({ type: String, default: null }) plateDigits: string | null;
   @Prop({ default: 0 }) plateConfidence: number;
   @Prop({ required: true, index: true }) occurredAt: Date;
   @Prop({ type: String, default: null }) snapshotUrl: string | null;
@@ -24,6 +25,7 @@ export const VehicleEventSchema = SchemaFactory.createForClass(VehicleEvent);
 @Schema({ timestamps: true, collection: 'vehicleVisits' })
 export class VehicleVisit {
   @Prop({ type: String, default: null, index: true }) plate: string | null;
+  @Prop({ type: String, default: null, index: true }) plateDigits: string | null;
   @Prop({ required: true, enum: VEHICLE_TYPES }) vehicleType: VehicleType;
   @Prop({ required: true }) gateId: string;
   @Prop({ required: true, index: true }) inAt: Date;
