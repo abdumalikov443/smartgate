@@ -30,7 +30,29 @@ def parse_line(text: str):
     return (x1, y1), (x2, y2)
 
 
+SCREEN_W, SCREEN_H = 1280, 720          # largest window we open on screen
+
+
+def limit_width(frame, max_width: int):
+    """Shrink big videos (4K, 1440p) before processing; 0 keeps the original size."""
+    h, w = frame.shape[:2]
+    if not max_width or w <= max_width:
+        return frame
+    scale = max_width / w
+    return cv2.resize(frame, (max_width, round(h * scale)), interpolation=cv2.INTER_AREA)
+
+
+def fit_to_screen(frame):
+    """Return (view, scale) so the window fits on a laptop screen."""
+    h, w = frame.shape[:2]
+    scale = min(1.0, SCREEN_W / w, SCREEN_H / h)
+    view = frame if scale == 1.0 else cv2.resize(frame, (round(w * scale), round(h * scale)), interpolation=cv2.INTER_AREA)
+    return view, scale
+
+
 def pick_line(frame):
+    """Click two points on a screen-sized preview; returns them in frame pixels."""
+    view0, scale = fit_to_screen(frame)
     pts = []
 
     def on_click(event, x, y, *_):
@@ -40,16 +62,18 @@ def pick_line(frame):
     cv2.namedWindow("pick line")
     cv2.setMouseCallback("pick line", on_click)
     while len(pts) < 2:
-        view = frame.copy()
+        view = view0.copy()
         for p in pts:
             cv2.circle(view, p, 6, (0, 215, 255), -1)
-        cv2.putText(view, "click 2 points for the gate line", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 215, 255), 2)
+        cv2.putText(view, "click 2 points for the gate line (Esc = cancel)", (20, 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 215, 255), 2)
         cv2.imshow("pick line", view)
         if cv2.waitKey(30) == 27:
             raise SystemExit("cancelled")
     cv2.destroyWindow("pick line")
-    print(f"--line {pts[0][0]},{pts[0][1]},{pts[1][0]},{pts[1][1]}")
-    return pts[0], pts[1]
+    (ax, ay), (bx, by) = [(round(x / scale), round(y / scale)) for x, y in pts]
+    print(f"--line {ax},{ay},{bx},{by}")
+    return (ax, ay), (bx, by)
 
 
 def main():
@@ -60,6 +84,9 @@ def main():
     ap.add_argument("--flip", action="store_true", help="swap IN and OUT")
     ap.add_argument("--margin", type=float, default=12, help="dead zone around the line in pixels (bigger = less double counting)")
     ap.add_argument("--stride", type=int, default=1, help="process every N-th frame (2 = about twice as fast)")
+    ap.add_argument("--max-width", type=int, default=1280,
+                    help="shrink wider videos to this width before processing (0 = keep original; "
+                         "use 0 or 1920 when plates are small). --line is in these pixels.")
     ap.add_argument("--gate", default="main")
     ap.add_argument("--plates", action=argparse.BooleanOptionalAction, default=True)
     ap.add_argument("--min-plate-height", type=int, default=120, help="only OCR vehicles at least this tall (px)")
@@ -74,6 +101,10 @@ def main():
     ok, frame = cap.read()
     if not ok:
         raise SystemExit(f"cannot read {args.source}")
+    orig_h, orig_w = frame.shape[:2]
+    frame = limit_width(frame, args.max_width)
+    if frame.shape[1] != orig_w:
+        print(f"video {orig_w}x{orig_h} -> processing at {frame.shape[1]}x{frame.shape[0]} (--max-width)")
     p1, p2 = pick_line(frame) if args.pick_line or not args.line else parse_line(args.line)
 
     tracker = VehicleTracker(config.YOLO_WEIGHTS)
@@ -99,6 +130,7 @@ def main():
             ok, frame = cap.read()
             continue
         processed += 1
+        frame = limit_width(frame, args.max_width)
         t = time.time()
         tracks = tracker.update(frame)
         t_detect += time.time() - t
@@ -134,7 +166,7 @@ def main():
             if writer:
                 writer.write(frame)
             if args.show:
-                cv2.imshow("SmartGate", frame)
+                cv2.imshow("SmartGate", fit_to_screen(frame)[0])
                 if cv2.waitKey(1) == 27:
                     break
         ok, frame = cap.read()
