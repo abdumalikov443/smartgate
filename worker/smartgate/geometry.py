@@ -20,6 +20,15 @@ def side_of_line(p1: Point, p2: Point, p: Point) -> float:
     return ((x2 - x1) * (y - y1) - (y2 - y1) * (x - x1)) / length
 
 
+def in_direction(p1: Point, p2: Point, in_is_positive: bool = True) -> Point:
+    """Unit vector perpendicular to the line, pointing the way a vehicle moves when it goes IN."""
+    (x1, y1), (x2, y2) = p1, p2
+    nx, ny = -(y2 - y1), (x2 - x1)                     # points to the positive side
+    length = (nx * nx + ny * ny) ** 0.5 or 1.0
+    sign = 1 if in_is_positive else -1
+    return sign * nx / length, sign * ny / length
+
+
 def within_segment(p1: Point, p2: Point, p: Point, slack: float = 0.05) -> bool:
     """True if the projection of p falls between p1 and p2 (with a little slack at the ends)."""
     (x1, y1), (x2, y2), (x, y) = p1, p2, p

@@ -162,7 +162,7 @@ def main():
             if writer or args.show:
                 draw_track(frame, tr, plates_seen.get(tr.track_id))
         if writer or args.show:
-            draw_line(frame, p1, p2, counts)
+            draw_line(frame, p1, p2, counts, in_is_positive=not args.flip)
             if writer:
                 writer.write(frame)
             if args.show:

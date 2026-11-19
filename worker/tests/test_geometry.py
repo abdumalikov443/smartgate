@@ -39,3 +39,15 @@ def test_crossing_outside_the_segment_is_ignored():
 def test_helpers():
     assert side_of_line((0, 0), (10, 0), (5, 5)) > 0 > side_of_line((0, 0), (10, 0), (5, -5))
     assert within_segment((0, 0), (10, 0), (5, 3)) and not within_segment((0, 0), (10, 0), (20, 0))
+
+
+def test_in_arrow_points_the_way_that_counts_as_in():
+    from smartgate.geometry import in_direction
+    for p1, p2 in [((0, 100), (200, 100)), ((200, 100), (0, 100)), ((50, 0), (60, 300))]:
+        for positive in (True, False):
+            c = LineCounter(p1, p2, in_is_positive=positive)
+            dx, dy = in_direction(p1, p2, positive)
+            mid = ((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2)
+            start = (mid[0] - dx * 50, mid[1] - dy * 50)
+            end = (mid[0] + dx * 50, mid[1] + dy * 50)
+            assert walk(c, 1, [start, end])[0].direction == "IN"
