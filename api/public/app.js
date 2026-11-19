@@ -29,12 +29,14 @@ async function loadStats() {
   $('#k-out').textContent = s.totals.OUT;
   $('#k-inside').textContent = s.insideNow;
   $('#k-dwell').textContent = mins(s.avgDwellMinutes);
-  $('#k-plates').textContent = s.plateReadRate == null ? '–' : `${Math.round(s.plateReadRate * 100)}%`;
+  // any plate information counts: a full plate or, when the letter was unreadable, the last 4 digits
+  const events = s.totals.IN + s.totals.OUT, withPlate = s.platesRead + (s.plateDigitsOnly ?? 0);
+  $('#k-plates').textContent = events ? `${Math.round((withPlate / events) * 100)}%` : '–';
   $('#k-in-sub').textContent = `${s.byType.truck.IN} trucks · ${s.byType.car.IN} cars`;
   $('#k-out-sub').textContent = `${s.byType.truck.OUT} trucks · ${s.byType.car.OUT} cars`;
   $('#k-inside-sub').textContent = `${s.insideByType.truck} trucks inside`;
   $('#k-dwell-sub').textContent = `trucks ${mins(s.avgDwellByType.truck)}`;
-  $('#k-plates-sub').textContent = `${s.platesRead} full plates · ${s.plateDigitsOnly ?? 0} by digits`;
+  $('#k-plates-sub').textContent = `${s.platesRead} full · ${s.plateDigitsOnly ?? 0} by last 4 digits`;
   hourly.data.datasets[0].data = s.hourly.map((h) => h.IN);
   hourly.data.datasets[1].data = s.hourly.map((h) => h.OUT);
   hourly.update();

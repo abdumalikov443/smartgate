@@ -42,6 +42,11 @@ class ApiClient:
             r = self.http.post(self.base + path, json=payload, headers=self.headers, timeout=self.timeout)
             r.raise_for_status()
             return True
+        except requests.HTTPError as e:
+            # show what the API rejected, e.g. a field the running API version does not know yet
+            body = e.response.text[:300] if e.response is not None else ""
+            log.warning("API %s failed (%s) %s - queued", path, e, body)
+            return False
         except requests.RequestException as e:
             log.warning("API %s failed (%s) - queued", path, e)
             return False
